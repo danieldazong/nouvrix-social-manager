@@ -1,0 +1,127 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// 1. Workspace
+model Workspace {
+  id               String            @id @default(uuid())
+  name             String
+  timezone         String            @default("UTC")
+  settings_json    String?        
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  memberships      Membership[]
+  brandProfile     BrandProfile?
+  knowledgeSources KnowledgeSource[]
+  facts            Fact[]
+  contentIdeas     ContentIdea[]
+  posts            Post[]
+}
+
+// 2. Memberships
+model Membership {
+  id             String    @id @default(uuid())
+  workspaceId    String
+  clerkUserId    String    @unique
+  role           String    @default("Viewer") 
+  status         String    @default("active")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  @@unique([workspaceId, clerkUserId]) 
+}
+
+// 3. Brand Profile
+model BrandProfile {
+  id             String    @id @default(uuid())
+  workspaceId    String    @unique
+  website        String?
+  voiceRules     String?
+  audience       String?
+  goals          String?
+  pillars        String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+// 4. Knowledge Source
+model KnowledgeSource {
+  id          String    @id @default(uuid())
+  workspaceId String
+  type        String    
+  content     String    
+  status      String    @default("pending") 
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  facts       Fact[]
+}
+
+// 5. Fact
+model Fact {
+  id                String          @id @default(uuid())
+  workspaceId       String
+  sourceId          String?
+  content           String
+  verificationState String          @default("unverified") 
+  verifiedBy        String?         
+  verifiedAt        DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  workspace         Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  source            KnowledgeSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+}
+
+// 6. Content Idea: The overarching concept proposed by the AI
+model ContentIdea {
+  id            String    @id @default(uuid())
+  workspaceId   String
+  weekId        String    // e.g., "2026-W46" to group a weekly plan
+  topic         String
+  pillar        String?
+  evidenceRefs  String?   // Tracks which facts were used
+  status        String    @default("draft") 
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  posts         Post[]
+}
+
+// 7. Post: The specific content container
+model Post {
+  id            String       @id @default(uuid())
+  workspaceId   String
+  ideaId        String
+  title         String
+  status        String       @default("draft") // draft, in_review, approved, scheduled
+  ownerId       String?      
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  idea          ContentIdea  @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  variants      PostVariant[]
+}
+
+// 8. Post Variant: Platform-specific (FB, IG, LinkedIn) copy
+model PostVariant {
+  id               String   @id @default(uuid())
+  postId           String
+  platform         String   // "facebook", "instagram", "linkedin"
+  caption          String
+  cta              String?
+  revision         Int      @default(1)
+  validationState  String   @default("pending")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  post             Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, platform]) // Enforces only one FB variant per post, etc.
+}
